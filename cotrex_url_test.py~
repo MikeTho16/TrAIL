@@ -74,8 +74,6 @@ def get_url(url, conn):
         message - Description of what went wrong
         success - True of there were no errors, False if there were
     """
-    # We want to make it look like we are a regular browser, so set the headers
-    # accordingly.
     my_headers = {
                   'accept': ('text/html,application/xhtml+xml,application/xml;q=0.9,'
                              'image/avif,image/webp,image/apng,*/*;q=0.8'),
@@ -165,10 +163,7 @@ def get_url(url, conn):
     return status, data1, msg, success
 
 def test_url(queue_in, queue_out):
-    """ Tests urls.  Meant to be run as a separate thread. Reads from queue_in,
-    tests the URL thus obtained, and if there is a failure, put a message in
-    queue_out.  Continues reading from queue_in until a "done" token is
-    encountered, at which point it exits.
+    """ Tests urls.  Meant to be run as a separate thread.
 
     Input(s):
         queue_in - Queue of URLs to test.
@@ -190,18 +185,6 @@ def test_url(queue_in, queue_out):
     print('ending test thread')
 
 def write_results(queue_out, lock):
-    """ Writes results from URL test to disk.  Meant to be run as separate thread.
-    Reads from queue_out and writes the result to disk.  Continues to do this
-    until a "done" token is encountered in queue_out, at which point the thread
-    exits.
-
-    Input(s):
-        queue_out - Queue containing information about URL test failures.
-        lock - Used to prevent other thread from interupting this thread
-            at critical times.  Probably not needed.
-    Output(s):
-        <nothing>
-    """
     print('starting write thread')
     error_log_file = open('./cotrex_url_errors2.csv', 'w', newline='', encoding='utf-8')
     fieldnames = ['feature_id', 'manager','name', 'url', 'error_message']
@@ -256,7 +239,6 @@ def main():
     start = time.time()
 
     # COTREX Trails
-    # TODO - read the name of the COTREX file from the command line
     cotrex_fname = './COTREX_Trails.shp'
     driver = ogr.GetDriverByName("ESRI Shapefile")
     data_source = driver.Open(cotrex_fname, 0)
@@ -322,6 +304,7 @@ def main():
     print(f'Trails w/ invalid URL: {trails_w_invalid_url}')
     print(f'Trails w/ valid URL: {total_trails - trails_w_no_url - trails_w_invalid_url}')
     print(f'Overall runtime: {end - start}')
+
 
 if __name__ == '__main__':
     main()
