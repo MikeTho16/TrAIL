@@ -1,0 +1,5 @@
+# TrAIL
+Trail Analysis and Integrity Logic - Tools for testing various sources of trail data.
+
+## cotrex_url_test
+Tests the URLs in the COTREX data to ensure that they work and lead to meaningful pages.  Redirects (301s, 302, <META http-equiv="refresh") are followed.  Final status codes other than 200 are recorded as an error.  Final results that contain the text "not found", "invalid url", or "something went wrong" are also flagged.  If multiple trails share the same URL, only the first is tested. The output is a CSV file that lists the COTREX id of the trail having an URL error, its name, its manager, and its URL.
