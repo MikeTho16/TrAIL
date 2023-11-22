@@ -262,6 +262,8 @@ def main():
     data_source = driver.Open(cotrex_fname, 0)
     cotrex_layer = data_source.GetLayer()
     cotrex_feature_count =  cotrex_layer.GetFeatureCount()
+    # TODO - These counts are not correct as we are now only testing
+    # unique URLs
     count = 0
     percent = -1
     total_trails = 0
