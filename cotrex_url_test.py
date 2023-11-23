@@ -201,7 +201,7 @@ def test_url(queue_in, queue_out):
                 queue_out.put(message)
     print('ending test thread')
 
-def write_results(queue_out, lock, output_fname):
+def write_results(queue_out, lock, output_fname, trails_w_invalid_urls):
     """ Writes results from URL test to disk.  Meant to be run as separate thread.
     Reads from queue_out and writes the result to disk.  Continues to do this
     until a "done" token is encountered in queue_out, at which point the thread
@@ -226,6 +226,9 @@ def write_results(queue_out, lock, output_fname):
             message = queue_out.get(block=True, timeout=None)
             done = message['done']
             if not done:
+                # Since numbers in Python are immutable, and threads cannot return a value
+                # we use a single element list here.
+                trails_w_invalid_urls[0] += 1
                 lock.acquire()
                 writer.writerow({'feature_id': message['id'], 'manager': message['manager'],
                                  'name': message['name'], 'url': message['url'],
@@ -285,13 +288,11 @@ def main():
     data_source = driver.Open(cotrex_fname, 0)
     cotrex_layer = data_source.GetLayer()
     cotrex_feature_count =  cotrex_layer.GetFeatureCount()
-    # TODO - These counts are not correct as we are now only testing
-    # unique URLs
     count = 0
     percent = -1
     total_trails = 0
     trails_w_no_url = 0
-    trails_w_invalid_url = 0
+    trails_w_invalid_url = [0]
     # sometimes multiple trails have the same url, keep track of them so
     # we don't waste time testing them again
     urls = []
@@ -305,7 +306,9 @@ def main():
         testing_threads.append(testing_thread)
         testing_thread.start()
     # Make thread for writing results
-    write_thread = threading.Thread(target=write_results, args=(queue_out, lock, output_fname))
+    write_thread = threading.Thread(target=write_results, args=(queue_out, lock,
+                                                                output_fname,
+                                                                trails_w_invalid_url))
     write_thread.start()
     for cotrex_feature in cotrex_layer:
         count += 1
@@ -325,24 +328,20 @@ def main():
         if url is None or url.upper() == 'NULL' or url == '':
             trails_w_no_url += 1
             continue
-        #message = [url, feature_id, name, manager, False]
         # Save time by only testing unique URLs
         if url in urls:
             continue
         urls.append(url)
-        #queue_in.put(message)
         queue_in.put({'url': url, 'id': feature_id, 'name': name,
                       'manager': manager, 'done': False})
     print('all data in                         ')
     # Let the threads know that all of the data has been put into the input queue
     for _ in range(NUM_THREADS):
-        #queue_in.put([None,None,None,None,True])
         queue_in.put({'url': None, 'id': None, 'name': None,
                       'manager': None, 'done': True})
     # Wait for all of the threads to finish
     for testing_thread in testing_threads:
         testing_thread.join()
-    #queue_out.put([None,None,None,None,True])
     queue_out.put({'url': None, 'id': None, 'name': None,
                    'manager': None, 'error_msg': None, 'done': True})
     write_thread.join()
@@ -350,8 +349,10 @@ def main():
     print('                                             ')
     print(f'Total trails: {total_trails}')
     print(f'Trails w/ no URL: {trails_w_no_url}')
-    print(f'Trails w/ invalid URL: {trails_w_invalid_url}')
-    print(f'Trails w/ valid URL: {total_trails - trails_w_no_url - trails_w_invalid_url}')
+    print(f'Trails w/ URL: {total_trails - trails_w_no_url}')
+    print(f'Trails w/ unique URLs: {len(urls)}')
+    print(f'Trails w/ unique URLs that are invalid: {trails_w_invalid_url[0]}')
+    print(f'Trails w/ unique URLs that are valid: {len(urls) - trails_w_invalid_url[0]}')
     print(f'Overall runtime: {end - start}')
 
 if __name__ == '__main__':
