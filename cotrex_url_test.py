@@ -8,7 +8,20 @@ or
 https://gisftp.colorado.gov/#/State%20Data/DNR/CPW/
 * If necessary, convert to shapefile
 * Rename to COTREX_Trails.shp
+
+usage: cotrex_url_test [-h] [--limit LIMIT] COTREX_file output_file
+
+Tests whether the URLs in the COTREX data work
+
+positional arguments:
+  COTREX_file    File containing the COTREX data
+  output_file    File to which the errors should be written
+
+options:
+  -h, --help     show this help message and exit
+  --limit LIMIT  Limit number of records tested (for testing purposes)
 """
+import argparse
 import csv
 import http.client
 import math
@@ -189,7 +202,7 @@ def test_url(queue_in, queue_out):
                 queue_out.put(message)
     print('ending test thread')
 
-def write_results(queue_out, lock):
+def write_results(queue_out, lock, output_fname):
     """ Writes results from URL test to disk.  Meant to be run as separate thread.
     Reads from queue_out and writes the result to disk.  Continues to do this
     until a "done" token is encountered in queue_out, at which point the thread
@@ -199,24 +212,26 @@ def write_results(queue_out, lock):
         queue_out - Queue containing information about URL test failures.
         lock - Used to prevent other thread from interupting this thread
             at critical times.  Probably not needed.
+        output_fname - name of the output file to which the errors are to be
+            written.
     Output(s):
         <nothing>
     """
     print('starting write thread')
-    error_log_file = open('./cotrex_url_errors2.csv', 'w', newline='', encoding='utf-8')
-    fieldnames = ['feature_id', 'manager','name', 'url', 'error_message']
-    writer = csv.DictWriter(error_log_file, fieldnames=fieldnames)
-    writer.writeheader()
-    done = False
-    while not done:
-        message = queue_out.get(block=True, timeout=None)
-        done = message[4]
-        if not done:
-            lock.acquire()
-            writer.writerow({'feature_id': message[1], 'manager': message[3], 'name': message[1],
-                             'url': message[0], 'error_message': message[5]})
-            lock.release()
-    error_log_file.close()
+    with open(output_fname, 'w', newline='', encoding='utf-8') as error_log_file:
+        fieldnames = ['feature_id', 'manager','name', 'url', 'error_message']
+        writer = csv.DictWriter(error_log_file, fieldnames=fieldnames)
+        writer.writeheader()
+        done = False
+        while not done:
+            message = queue_out.get(block=True, timeout=None)
+            done = message[4]
+            if not done:
+                lock.acquire()
+                writer.writerow({'feature_id': message[1], 'manager': message[3],
+                                 'name': message[1], 'url': message[0],
+                                 'error_message': message[5]})
+                lock.release()
     print('ending write thread')
 
 def read_feature(cotrex_feature, lock):
@@ -254,10 +269,19 @@ def main():
     """ Main function of program.
     """
     start = time.time()
+    parser = argparse.ArgumentParser(
+        prog='cotrex_url_test',
+        description='Tests whether the URLs in the COTREX data work')
+    parser.add_argument('COTREX_file', help='File containing the COTREX data')
+    parser.add_argument('output_file', help='File to which the errors should be written')
+    parser.add_argument('--limit', type=int, help='Limit number of records tested '
+                        '(for testing purposes)')
+    args = parser.parse_args()
+    cotrex_fname = args.COTREX_file
+    output_fname = args.output_file
+    limit = args.limit
 
     # COTREX Trails
-    # TODO - read the name of the COTREX file from the command line
-    cotrex_fname = './COTREX_Trails.shp'
     driver = ogr.GetDriverByName("ESRI Shapefile")
     data_source = driver.Open(cotrex_fname, 0)
     cotrex_layer = data_source.GetLayer()
@@ -275,23 +299,22 @@ def main():
     queue_in = queue.Queue(maxsize=NUM_THREADS*4)
     queue_out = queue.Queue(maxsize=NUM_THREADS*4)
     lock = threading.Lock()
-    threads = []
+    testing_threads = []
     # Make threads for testing the URLs
     for _ in range(NUM_THREADS):
         testing_thread = threading.Thread(target=test_url, args=(queue_in, queue_out))
-        threads.append(testing_thread)
+        testing_threads.append(testing_thread)
         testing_thread.start()
     # Make thread for writing results
-    write_thread = threading.Thread(target=write_results, args=(queue_out, lock))
+    write_thread = threading.Thread(target=write_results, args=(queue_out, lock, output_fname))
     write_thread.start()
     for cotrex_feature in cotrex_layer:
         count += 1
         url, manager, name, feature_id = read_feature(cotrex_feature, lock)
         total_trails += 1
-        # TESTING
-        #if count > 3000:
-        #    break
-        # END TESTING
+        if limit:
+            if count > limit:
+                break
         # Display percent progress
         if math.floor((count / cotrex_feature_count) * 100) > percent:
             percent = math.floor((count / cotrex_feature_count) * 100)
@@ -313,8 +336,8 @@ def main():
     for _ in range(NUM_THREADS):
         queue_in.put([None,None,None,None,True])
     # Wait for all of the threads to finish
-    for thread in threads:
-        thread.join()
+    for testing_thread in testing_threads:
+        testing_thread.join()
     queue_out.put([None,None,None,None,True])
     write_thread.join()
     end = time.time()
