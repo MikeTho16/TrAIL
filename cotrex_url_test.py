@@ -187,7 +187,6 @@ def test_url(queue_in, queue_out):
         queue_in - Queue of URLs to test.
         queue_out - Queue into which to put errors.  These are handled by
             separate process.
-
     """
     print('starting test thread')
     done = False
@@ -295,7 +294,7 @@ def main():
     trails_w_invalid_url = 0
     # sometimes multiple trails have the same url, keep track of them so
     # we don't waste time testing them again
-    urls = {}
+    urls = []
     queue_in = queue.Queue(maxsize=NUM_THREADS*4)
     queue_out = queue.Queue(maxsize=NUM_THREADS*4)
     lock = threading.Lock()
@@ -310,11 +309,11 @@ def main():
     write_thread.start()
     for cotrex_feature in cotrex_layer:
         count += 1
-        url, manager, name, feature_id = read_feature(cotrex_feature, lock)
-        total_trails += 1
         if limit:
             if count > limit:
                 break
+        url, manager, name, feature_id = read_feature(cotrex_feature, lock)
+        total_trails += 1
         # Display percent progress
         if math.floor((count / cotrex_feature_count) * 100) > percent:
             percent = math.floor((count / cotrex_feature_count) * 100)
@@ -327,9 +326,10 @@ def main():
             trails_w_no_url += 1
             continue
         message = [url, feature_id, name, manager, False]
+        # Save time by only testing unique URLs
         if url in urls:
             continue
-        urls[url] = True
+        urls.append(url)
         queue_in.put(message)
     print('all data in                         ')
     # Let the threads know that all of the data has been put into the input queue
