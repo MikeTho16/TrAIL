@@ -192,12 +192,12 @@ def test_url(queue_in, queue_out):
     done = False
     while not done:
         message = queue_in.get()
-        done = message[4]
+        done = message['done']
         if not done:
-            url = message[0]
-            _, _, msg, success = get_url(url, None)
+            url = message['url']
+            _, _, error_msg, success = get_url(message['url'], None)
             if not success:
-                message.append(msg)
+                message['error_msg'] = error_msg
                 queue_out.put(message)
     print('ending test thread')
 
@@ -224,12 +224,12 @@ def write_results(queue_out, lock, output_fname):
         done = False
         while not done:
             message = queue_out.get(block=True, timeout=None)
-            done = message[4]
+            done = message['done']
             if not done:
                 lock.acquire()
-                writer.writerow({'feature_id': message[1], 'manager': message[3],
-                                 'name': message[1], 'url': message[0],
-                                 'error_message': message[5]})
+                writer.writerow({'feature_id': message['id'], 'manager': message['manager'],
+                                 'name': message['name'], 'url': message['url'],
+                                 'error_message': message['error_msg']})
                 lock.release()
     print('ending write thread')
 
@@ -325,20 +325,26 @@ def main():
         if url is None or url.upper() == 'NULL' or url == '':
             trails_w_no_url += 1
             continue
-        message = [url, feature_id, name, manager, False]
+        #message = [url, feature_id, name, manager, False]
         # Save time by only testing unique URLs
         if url in urls:
             continue
         urls.append(url)
-        queue_in.put(message)
+        #queue_in.put(message)
+        queue_in.put({'url': url, 'id': feature_id, 'name': name,
+                      'manager': manager, 'done': False})
     print('all data in                         ')
     # Let the threads know that all of the data has been put into the input queue
     for _ in range(NUM_THREADS):
-        queue_in.put([None,None,None,None,True])
+        #queue_in.put([None,None,None,None,True])
+        queue_in.put({'url': None, 'id': None, 'name': None,
+                      'manager': None, 'done': True})
     # Wait for all of the threads to finish
     for testing_thread in testing_threads:
         testing_thread.join()
-    queue_out.put([None,None,None,None,True])
+    #queue_out.put([None,None,None,None,True])
+    queue_out.put({'url': None, 'id': None, 'name': None,
+                   'manager': None, 'error_msg': None, 'done': True})
     write_thread.join()
     end = time.time()
     print('                                             ')
