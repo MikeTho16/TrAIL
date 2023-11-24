@@ -194,7 +194,6 @@ def test_url(queue_in, queue_out):
         message = queue_in.get()
         done = message['done']
         if not done:
-            url = message['url']
             _, _, error_msg, success = get_url(message['url'], None)
             if not success:
                 message['error_msg'] = error_msg
@@ -295,7 +294,7 @@ def main():
     trails_w_invalid_url = [0]
     # sometimes multiple trails have the same url, keep track of them so
     # we don't waste time testing them again
-    urls = []
+    urls = set()
     queue_in = queue.Queue(maxsize=NUM_THREADS*4)
     queue_out = queue.Queue(maxsize=NUM_THREADS*4)
     lock = threading.Lock()
@@ -331,7 +330,7 @@ def main():
         # Save time by only testing unique URLs
         if url in urls:
             continue
-        urls.append(url)
+        urls.add(url)
         queue_in.put({'url': url, 'id': feature_id, 'name': name,
                       'manager': manager, 'done': False})
     print('all data in                         ')
@@ -339,11 +338,12 @@ def main():
     for _ in range(NUM_THREADS):
         queue_in.put({'url': None, 'id': None, 'name': None,
                       'manager': None, 'done': True})
-    # Wait for all of the threads to finish
+    # Wait for all of the testing threads to finish
     for testing_thread in testing_threads:
         testing_thread.join()
     queue_out.put({'url': None, 'id': None, 'name': None,
                    'manager': None, 'error_msg': None, 'done': True})
+    # Wait for the write thread to finish
     write_thread.join()
     end = time.time()
     print('                                             ')
